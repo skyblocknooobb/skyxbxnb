@@ -756,25 +756,36 @@ function showWL(){
 
 function saveProg(id,ep){S.prog[id]=ep;localStorage.setItem('sky_prog',JSON.stringify(S.prog));}
 
-// ── ANILIST OAUTH ────────────────────────────────────
+// ── ANILIST PIN FLOW ─────────────────────────────────
 function connectAL(){
-  const redir=encodeURIComponent(location.origin+location.pathname);
-  location.href=`https://anilist.co/api/v2/oauth/authorize?client_id=${AL_CLIENT_ID}&redirect_uri=${redir}&response_type=token`;
+  // Open AniList PIN page in new tab
+  window.open(`https://anilist.co/api/v2/oauth/authorize?client_id=${AL_CLIENT_ID}&response_type=token`,'_blank');
+  // Show PIN input dialog
+  setTimeout(()=>{
+    const tok=prompt('AniList will show you a token.\nCopy it and paste it here:');
+    if(!tok||!tok.trim())return;
+    loginWithToken(tok.trim());
+  },1000);
+}
+async function loginWithToken(tok){
+  S.tok=tok;localStorage.setItem('sky_tok',tok);
+  const u=await fetchALUser(tok);
+  if(!u){toast('Invalid token, try again');S.tok=null;localStorage.removeItem('sky_tok');return;}
+  S.user=u;localStorage.setItem('sky_user',JSON.stringify(u));
+  renderALAv();toast(`Hi ${u.name} ✓`);
 }
 async function fetchALUser(tok){
-  const r=await fetch(AL_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},body:JSON.stringify({query:'{Viewer{id name avatar{medium}}}'})});
-  const d=await r.json();return d?.data?.Viewer;
+  try{
+    const r=await fetch(AL_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${tok}`},body:JSON.stringify({query:'{Viewer{id name avatar{medium}}}'})});
+    const d=await r.json();return d?.data?.Viewer;
+  }catch{return null;}
 }
 function handleALCb(){
-  const hash=location.hash;if(!hash.includes('access_token'))return;
-  const p=new URLSearchParams(hash.slice(1));const tok=p.get('access_token');if(!tok)return;
-  S.tok=tok;localStorage.setItem('sky_tok',tok);
-  history.replaceState({},'',location.pathname);
-  fetchALUser(tok).then(u=>{if(!u)return;S.user=u;localStorage.setItem('sky_user',JSON.stringify(u));renderALAv();toast(`Hi ${u.name} ✓`);});
+  // PIN flow — no redirect callback needed
 }
 function renderALAv(){
   const el=document.getElementById('alav');
-  if(S.user) el.innerHTML=`<img class="av" src="${S.user.avatar.medium}" title="${S.user.name}" onclick="logoutAL()">`;
+  if(S.user) el.innerHTML=`<img class="av" src="${S.user.avatar.medium}" title="${S.user.name} (tap to logout)" onclick="logoutAL()">`;
   else el.innerHTML=`<button class="ib" onclick="connectAL()" title="Connect AniList"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>`;
 }
 function logoutAL(){
